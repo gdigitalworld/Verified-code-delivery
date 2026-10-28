@@ -1,0 +1,40 @@
+name: Release
+
+# Runs only when a version tag is pushed (for example v1.0.0).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write      # create the GitHub release
+      id-token: write      # sign build provenance
+      attestations: write  # store build provenance
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Test before releasing
+        run: python -m unittest discover -s tests
+      - name: Build the skill
+        run: python tools/build_skill.py --out dist
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/verified-code-delivery.skill
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" dist/verified-code-delivery.skill dist/verified-code-delivery.skill.sha256 \
+            --title "$TAG" --generate-notes --verify-tag
