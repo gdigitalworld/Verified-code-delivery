@@ -156,7 +156,13 @@ class EnvTests(TmpDirCase):
                        "        self.send_response(200 if os.environ.get('MY_FLAG') == 'on' else 503)\n"
                        "        self.end_headers()\n"
                        "    def log_message(self, *a): pass\n"
-                       "http.server.HTTPServer(('127.0.0.1', int(os.environ['PORT'])), H).serve_forever()\n")
+                       "import socketserver\n"
+                       "class S(http.server.HTTPServer):\n"
+                       "    def server_bind(self):\n"
+                       "        # skip socket.getfqdn(): its reverse lookup can hang ~30s on macOS CI runners\n"
+                       "        socketserver.TCPServer.server_bind(self)\n"
+                       "        self.server_name, self.server_port = 'localhost', self.server_address[1]\n"
+                       "S(('127.0.0.1', int(os.environ['PORT'])), H).serve_forever()\n")
         cmd = f'"{sys.executable}" {server.name}'
         port = free_port()
         good = run("smoke_test.py", "--cwd", self.root, "--cmd", cmd, "--port", port,

@@ -304,7 +304,13 @@ class SmokeTestTests(TmpDirCase):
             "    def do_GET(self):\n"
             f"        self.send_response({status}); self.end_headers(); self.wfile.write(b'ok')\n"
             "    def log_message(self, *a): pass\n"
-            f"http.server.HTTPServer(('127.0.0.1', {port}), H).serve_forever()\n",
+            "import socketserver\n"
+            "class S(http.server.HTTPServer):\n"
+            "    def server_bind(self):\n"
+            "        # skip socket.getfqdn(): its reverse lookup can hang ~30s on macOS CI runners\n"
+            "        socketserver.TCPServer.server_bind(self)\n"
+            "        self.server_name, self.server_port = 'localhost', self.server_address[1]\n"
+            f"S(('127.0.0.1', {port}), H).serve_forever()\n",
             encoding="utf-8")
         return f'"{sys.executable}" server.py'
 
