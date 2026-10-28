@@ -15,12 +15,12 @@ Without it, generated code often arrives with a missing import, a type error, a 
 
 ## Install
 
-**Claude (claude.ai / desktop / mobile):** download `verified-code-delivery.skill` from the [latest release](https://github.com/REPLACE_OWNER/verified-code-delivery/releases/latest) and upload it in Claude's Skills settings.
+**Claude (claude.ai / desktop / mobile):** download `verified-code-delivery.skill` from the [latest release](https://github.com/gdigitalworld/Verified-code-delivery/releases/latest) and upload it in Claude's Skills settings.
 
 **Claude Code:** copy the skill folder into your skills directory.
 
 ```
-git clone https://github.com/REPLACE_OWNER/verified-code-delivery
+git clone https://github.com/gdigitalworld/Verified-code-delivery
 cp -r verified-code-delivery/skills/verified-code-delivery ~/.claude/skills/
 ```
 

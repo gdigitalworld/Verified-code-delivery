@@ -1,0 +1,32 @@
+name: Bug report
+description: Something in a script or in the skill's behaviour is wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste real API keys, tokens or private code. For security problems use the private reporting link instead of this form.
+  - type: input
+    id: version
+    attributes:
+      label: Skill version (release tag or commit)
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where did it run?
+      options: [Claude.ai, Claude Code, Command line (scripts only), Other]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps or command to reproduce
+      render: shell

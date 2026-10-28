@@ -1,0 +1,21 @@
+{
+  "note": "Queries for checking that the skill description triggers on coding tasks and stays quiet otherwise. Not yet run automatically: use skill-creator's description optimizer (needs the claude CLI) or try them by hand. 'near_miss' items are deliberate look-alikes that should NOT trigger.",
+  "queries": [
+    {"query": "add a Stripe checkout API route to my Next.js 14 app. Files so far: app/api/checkout/route.ts is empty, package.json has next and stripe", "should_trigger": true},
+    {"query": "write a python script that merges every CSV in a folder by the 'id' column, and make sure it runs", "should_trigger": true},
+    {"query": "refactor this express server to async/await and send me the changed files as a zip", "should_trigger": true},
+    {"query": "fix the TypeScript errors in this component, tsc is failing with 14 errors", "should_trigger": true},
+    {"query": "migrate the utils folder from JavaScript to TypeScript across the whole project", "should_trigger": true},
+    {"query": "build a FastAPI endpoint that accepts an image upload and stores it in S3", "should_trigger": true},
+    {"query": "my build fails with Cannot find module 'zod' after your last change, please fix", "should_trigger": true},
+    {"query": "implement server-side pagination for the orders table in my React admin panel", "should_trigger": true},
+    {"query": "explain the difference between useEffect and useLayoutEffect", "should_trigger": false},
+    {"query": "write a cover letter for a frontend developer job at a fintech startup", "should_trigger": false},
+    {"query": "what is the time complexity of quicksort in the worst case?", "should_trigger": false},
+    {"query": "summarize this PDF and list the action items", "should_trigger": false},
+    {"query": "convert this Word document to a PDF", "should_trigger": false},
+    {"query": "what is a good name for my SaaS website builder?", "should_trigger": false},
+    {"query": "explain what this regex does: ^\\d{3}-\\d{4}$", "should_trigger": false, "near_miss": true},
+    {"query": "should I use Postgres or MongoDB for a course platform? just compare them, no code needed", "should_trigger": false, "near_miss": true}
+  ]
+}

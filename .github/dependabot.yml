@@ -1,0 +1,11 @@
+version: 2
+updates:
+  # The repo has no runtime dependencies (standard library only), so the only
+  # thing to keep current is the pinned GitHub Actions.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns: ["*"]
