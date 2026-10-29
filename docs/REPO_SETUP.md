@@ -30,6 +30,10 @@ Optional environment variables: `REQUIRED_APPROVALS` (default `0`, set `1` when 
 - Account level: turn on 2FA with a hardware key or passkey, and sign your commits and tags
 - Settings, Rules: add a tag ruleset for `v*` so only maintainers can create release tags
 
+## Website (GitHub Pages)
+
+The landing page is `docs/index.html`. Turn it on once: **Settings, Pages, Source = Deploy from a branch, branch `main`, folder `/docs`**. No workflow is needed. `docs/_config.yml` keeps `REPO_SETUP.md` and `THREAT_MODEL.md` out of the published site; add any new maintainer-only file there too.
+
 ## 4. First release
 
 ```
