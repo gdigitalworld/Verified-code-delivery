@@ -53,6 +53,18 @@ class MonorepoDetectTests(TmpDirCase):
         installs = [cwd for kind, cwd in self.steps() if kind == "install"]
         self.assertEqual(sorted(installs), ["admin", "web"])
 
+    def test_project_filter_keeps_workspace_root_install(self):
+        self.make_workspace()
+        only = self.steps(["apps/web"])
+        self.assertEqual(only[0], ("install", "."))
+        self.assertIn(("build", "apps/web"), only)
+        self.assertNotIn(("test", "apps/api"), only)
+
+    def test_project_filter_without_workspace_adds_no_root_install(self):
+        write(self.root, "web/package.json", pkg(scripts={"build": "x"}))
+        write(self.root, "admin/package.json", pkg(scripts={"build": "x"}))
+        self.assertEqual([c for k, c in self.steps(["web"]) if k == "install"], ["web"])
+
     def test_pnpm_workspace_file_selects_pnpm(self):
         write(self.root, "package.json", pkg(scripts={"build": "x"}))
         write(self.root, "pnpm-workspace.yaml", "packages:\n  - 'apps/*'\n")

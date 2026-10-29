@@ -135,7 +135,7 @@ def check_node(root: Path) -> list[str]:
             if name in NODE_BUILTINS or name in allowed:
                 continue
             line = text.count("\n", 0, m.start()) + 1
-            problems.append(f"{path.relative_to(root)}:{line} imports '{name}' but it is not in {manifest_name}")
+            problems.append(f"{path.relative_to(root).as_posix()}:{line} imports '{name}' but it is not in {manifest_name}")
     return sorted(set(problems))
 
 
@@ -197,19 +197,36 @@ def local_python_modules(root: Path) -> set[str]:
     return names
 
 
+PY_IMPORT_RE = re.compile(r"^\s*(?:import\s+([A-Za-z_][\w.]*(?:\s*,\s*[A-Za-z_][\w.]*)*)|from\s+([A-Za-z_][\w.]*)\s+import\b)", re.MULTILINE)
+
+
+def regex_imports(text: str) -> list[tuple[str, int]]:
+    """Fallback for files that do not parse: best-effort import names with line numbers."""
+    found = []
+    for m in PY_IMPORT_RE.finditer(text):
+        line = text.count("\n", 0, m.start()) + 1
+        for mod in (m.group(1) or m.group(2)).split(","):
+            found.append((mod.strip().split(".")[0], line))
+    return found
+
+
 def check_python(root: Path) -> tuple[list[str], str | None]:
     declared = python_declared(root)
     local = local_python_modules(root)
     stdlib = set(sys.stdlib_module_names)
     problems = []
     for path in walk(root, {".py"}):
+        text = path.read_text(encoding="utf-8", errors="ignore")
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"))
+            tree = ast.parse(text)
+            names_by_node = None
         except SyntaxError as e:
-            problems.append(f"{path.relative_to(root)}:{e.lineno} syntax error: {e.msg}")
-            continue
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
+            problems.append(f"{path.relative_to(root).as_posix()}:{e.lineno} syntax error: {e.msg}")
+            tree, names_by_node = None, regex_imports(text)  # still check this file's imports
+        for node in (ast.walk(tree) if tree else [None]):
+            if tree is None:
+                names = names_by_node
+            elif isinstance(node, ast.Import):
                 names = [(a.name.split(".")[0], node.lineno) for a in node.names]
             elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
                 names = [(node.module.split(".")[0], node.lineno)]
@@ -225,7 +242,7 @@ def check_python(root: Path) -> tuple[list[str], str | None]:
                     continue
                 if not any(norm(d) in declared for d in dists):
                     problems.append(
-                        f"{path.relative_to(root)}:{lineno} imports '{name}' but "
+                        f"{path.relative_to(root).as_posix()}:{lineno} imports '{name}' but "
                         f"'{dists[0]}' is not in requirements/pyproject"
                     )
     note = None
@@ -253,7 +270,9 @@ def main() -> None:
     for n in notes:
         print(f"NOTE  {n}")
     if problems:
-        print(f"FAIL  {len(problems)} undeclared import(s):")
+        syntax = sum("syntax error:" in p for p in problems)
+        detail = f"{len(problems) - syntax} undeclared import(s)" + (f", {syntax} syntax error(s)" if syntax else "")
+        print(f"FAIL  {len(problems)} problem(s): {detail}")
         for p in problems:
             print(f"  {p}")
         sys.exit(1)

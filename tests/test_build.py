@@ -10,6 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
+from test_scripts import make_symlink  # noqa: E402
+
 import build_skill  # noqa: E402
 
 
@@ -55,7 +57,7 @@ class BuildSkillTests(unittest.TestCase):
 
     def test_validation_rejects_symlinks(self):
         skill = self.copy_skill()
-        (skill / "scripts" / "link.py").symlink_to(skill / "SKILL.md")
+        make_symlink(skill / "scripts" / "link.py", skill / "SKILL.md")
         self.assertTrue(any("symlink" in e for e in build_skill.validate(skill)))
 
 

@@ -37,6 +37,34 @@ MAX_RESTORE_FILE = 512 * 1024
 MAX_RESTORE_TOTAL = 50 * 1024 * 1024
 
 
+def failure_excerpt(output: str, limit: int = TAIL_LINES) -> str:
+    """Last lines of output, but with TAP `not ok` blocks (the real assertion) moved to the top.
+
+    Node's test runner prints the failing assertion in the middle of a long log;
+    the plain tail would show only the summary. Other runners keep the plain tail.
+    """
+    lines = ANSI_RE.sub("", output).strip().splitlines()
+    blocks: list[str] = []
+    i = 0
+    while i < len(lines):
+        if re.match(r"^\s*not ok\b", lines[i]):
+            j = i + 1
+            while j < len(lines) and not re.match(r"^\s*(not ok|ok)\b|^#", lines[j]):
+                j += 1
+            blocks.append("\n".join(lines[i:j][:25]))
+            i = j
+        else:
+            i += 1
+    tail = "\n".join(lines[-limit:])
+    if not blocks:
+        return tail
+    head = "\n".join(blocks)
+    head_lines = head.splitlines()
+    if len(head_lines) > 2 * limit:
+        head = "\n".join(head_lines[: 2 * limit]) + "\n... (more failing tests, see full output)"
+    return f"[failing tests]\n{head}\n\n[end of output]\n{tail}"
+
+
 def run_step(step: dict, root: Path, timeout: int, extra_env: dict[str, str] | None = None) -> dict:
     env = dict(os.environ)
     env.update({"CI": "1", "NEXT_TELEMETRY_DISABLED": "1", "FORCE_COLOR": "0"})
@@ -59,7 +87,7 @@ def run_step(step: dict, root: Path, timeout: int, extra_env: dict[str, str] | N
         "status": status,
         "exit_code": code,
         "seconds": round(time.time() - start, 1),
-        "tail": "\n".join(ANSI_RE.sub("", output).strip().splitlines()[-TAIL_LINES:]),
+        "tail": failure_excerpt(output) if status != "passed" else "\n".join(ANSI_RE.sub("", output).strip().splitlines()[-TAIL_LINES:]),
     }
 
 

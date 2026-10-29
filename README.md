@@ -21,7 +21,7 @@ Without it, generated code often arrives with a missing import, a type error, a 
 
 ```
 git clone https://github.com/gdigitalworld/Verified-code-delivery
-cp -r verified-code-delivery/skills/verified-code-delivery ~/.claude/skills/
+cp -r Verified-code-delivery/skills/verified-code-delivery ~/.claude/skills/
 ```
 
 Requirements: Python 3.11+. Node/npm for JavaScript projects. Linux and macOS are supported; on Windows use WSL.
