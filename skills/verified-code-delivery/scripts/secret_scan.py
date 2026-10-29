@@ -122,7 +122,7 @@ def scan_paths(paths: list[Path]) -> list[dict]:
             rel = f.relative_to(base)
             if any(part in IGNORE_DIRS for part in rel.parts) or f.is_symlink() or not f.is_file():
                 continue
-            findings += scan_file(f, str(rel))
+            findings += scan_file(f, rel.as_posix())
     return findings
 
 

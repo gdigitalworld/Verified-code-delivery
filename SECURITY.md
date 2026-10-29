@@ -34,7 +34,7 @@ Out of scope:
 Each release includes `verified-code-delivery.skill`, a SHA-256 file, and a signed build-provenance attestation:
 
 ```
-gh attestation verify verified-code-delivery.skill --repo REPLACE_OWNER/verified-code-delivery
+gh attestation verify verified-code-delivery.skill --repo gdigitalworld/Verified-code-delivery
 sha256sum -c verified-code-delivery.skill.sha256
 ```
 

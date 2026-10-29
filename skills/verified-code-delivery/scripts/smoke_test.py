@@ -51,6 +51,15 @@ def fetch(url: str) -> int:
 def stop(proc: subprocess.Popen) -> None:
     if proc.poll() is not None:
         return
+    if os.name == "nt":
+        # No process groups on Windows: with shell=True the app is a child of cmd.exe,
+        # so end the whole tree or the app keeps running and locks the log and the folder.
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True)
+        try:
+            proc.wait(timeout=8)
+        except Exception:
+            pass
+        return
     try:
         os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
         proc.wait(timeout=8)
@@ -89,7 +98,7 @@ def main() -> None:
     env.update(extra_env)
     proc = subprocess.Popen(
         args.cmd, shell=True, cwd=args.cwd, env=env,
-        stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+        stdout=log, stderr=subprocess.STDOUT, **({} if os.name == "nt" else {"start_new_session": True}),
     )
 
     def tail() -> str:
@@ -127,7 +136,14 @@ def main() -> None:
     finally:
         stop(proc)
         log.close()
-        os.unlink(log.name)
+        for _ in range(25):  # Windows may release the file a moment after the process ends
+            try:
+                os.unlink(log.name)
+                break
+            except FileNotFoundError:
+                break
+            except PermissionError:
+                time.sleep(0.2)
 
     sys.exit(1 if failures else 0)
 

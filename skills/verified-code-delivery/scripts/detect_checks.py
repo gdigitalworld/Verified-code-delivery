@@ -168,7 +168,11 @@ def detect(root: Path, only: list[str] | None = None) -> list[dict]:
 
     if only:
         wanted = [w.strip("/").removeprefix("./") or "." for w in only]
-        steps = [s for s in steps if any(s["cwd"] == w or s["cwd"].startswith(w + "/") for w in wanted)]
+        keep_root_install = ws_root is not None and "." not in wanted
+        steps = [s for s in steps
+                 if any(s["cwd"] == w or s["cwd"].startswith(w + "/") for w in wanted)
+                 # a workspace's packages need the root install even when only one is selected
+                 or (keep_root_install and s["cwd"] == "." and s["kind"] == "install")]
     return steps
 
 
