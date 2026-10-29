@@ -1,0 +1,16 @@
+# Shows a "Sponsor" button on the repository page.
+# Keep only the lines you actually use. An account that does not exist, or is not
+# enabled yet, makes GitHub flag this file as invalid and hide the button.
+
+# GitHub Sponsors: enable it first at https://github.com/sponsors, then uncomment.
+# github: gdigitalworld
+
+# One username per platform:
+# ko_fi: your-username
+# buy_me_a_coffee: your-username
+# patreon: your-username
+# liberapay: your-username
+# open_collective: your-username
+
+# Any other payment page, up to 4 links (for example a Razorpay payment page):
+# custom: ["https://example.com/support"]
