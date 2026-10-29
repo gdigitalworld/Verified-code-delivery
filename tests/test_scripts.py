@@ -47,6 +47,14 @@ def fake_jwt(role: str) -> str:
     return enc({"alg": "HS256"}) + "." + enc({"role": role, "iss": "supabase"}) + ".abcdefghijklmnop1234567890"
 
 
+def make_symlink(link: Path, target: Path) -> None:
+    """Create a symlink, or skip the test where the OS forbids it (Windows without Developer Mode)."""
+    try:
+        link.symlink_to(target)
+    except (OSError, NotImplementedError) as e:
+        raise unittest.SkipTest(f"cannot create symlinks here: {e}")
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -93,7 +101,7 @@ class SecretScanTests(TmpDirCase):
         outside = write(self.root, "outside/secret.txt", "password = '" + "Zk9xQw2LmN8vTy4RpS6u" + "'\n")
         proj = self.root / "proj"
         proj.mkdir()
-        (proj / "link.txt").symlink_to(outside)
+        make_symlink(proj / "link.txt", outside)
         self.assertEqual(secret_scan.scan_paths([proj]), [])
 
 
@@ -170,7 +178,7 @@ class ChangedFilesTests(TmpDirCase):
         outside = write(self.root, "outside/o.txt", "x")
         proj = self.root / "proj"
         proj.mkdir()
-        (proj / "link.txt").symlink_to(outside)
+        make_symlink(proj / "link.txt", outside)
         self.assertEqual(changed_files.take_snapshot(proj), {})
 
 
@@ -207,7 +215,7 @@ class MakeZipTests(TmpDirCase):
         proj = self.root / "proj"
         write(proj, "a.txt", "1")
         outside = write(self.root, "outside.txt", "secret stuff")
-        (proj / "link.txt").symlink_to(outside)
+        make_symlink(proj / "link.txt", outside)
         out = self.root / "x.zip"
         self.assertNotEqual(run("make_zip.py", "--root", proj, "--out", out, "link.txt").returncode, 0)
         self.assertNotEqual(run("make_zip.py", "--root", proj, "--out", out, "../outside.txt").returncode, 0)

@@ -63,7 +63,7 @@ def validate(skill_dir: Path) -> list[str]:
 
 def collect(skill_dir: Path) -> list[Path]:
     files = []
-    for path in sorted(skill_dir.rglob("*")):
+    for path in sorted(skill_dir.rglob("*"), key=lambda p: p.relative_to(skill_dir).as_posix()):
         rel = path.relative_to(skill_dir)
         if path.is_dir() or any(part in EXCLUDE_DIRS for part in rel.parts):
             continue
