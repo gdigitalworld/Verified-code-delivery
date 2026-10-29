@@ -13,6 +13,8 @@ Without it, generated code often arrives with a missing import, a type error, a 
 5. Works out exactly which files changed (`changed_files.py`) and ZIPs only those, with correct repo-relative paths (`make_zip.py`). The ZIP is refused if a secret is found.
 6. Ends with a short note: what ran, what passed, what could not be verified (live APIs, databases, secrets)
 
+Website: https://gdigitalworld.github.io/Verified-code-delivery/ (source: `docs/index.html`)
+
 ## Install
 
 **Claude (claude.ai / desktop / mobile):** download `verified-code-delivery.skill` from the [latest release](https://github.com/gdigitalworld/Verified-code-delivery/releases/latest) and upload it in Claude's Skills settings.

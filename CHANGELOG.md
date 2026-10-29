@@ -13,5 +13,6 @@ First public release.
 - `check_imports.py` keeps checking imports in files that have a syntax error and reports both kinds of problem in its heading.
 - `--project` on a JS workspace still runs the root install.
 - Windows: `smoke_test.py` ends the whole process tree and tolerates a locked log file, messages always use `/` in paths, the `.skill` archive order no longer depends on the OS, and symlink tests skip where symlinks are not allowed.
+- Landing page in `docs/index.html`, published by GitHub Pages straight from the branch (no workflow). `docs/_config.yml` keeps the maintainer docs out of the site.
 - Security: symlinks are never followed, ZIP creation is blocked when secrets are found, `verify.py --ignore-scripts` for untrusted projects.
 - Repository: tests, CI, CodeQL, pinned actions, reproducible builds with provenance attestation.
