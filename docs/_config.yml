@@ -1,0 +1,4 @@
+# GitHub Pages publishes this folder. Keep the maintainer docs out of the website.
+exclude:
+  - REPO_SETUP.md
+  - THREAT_MODEL.md

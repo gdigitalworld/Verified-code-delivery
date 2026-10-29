@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>verified-code-delivery · a Claude skill that runs your code before you get it</title>
+<meta name="description" content="An open-source Claude skill that builds, tests and smoke-tests code in the sandbox, fixes what breaks, and ends with an honest note on what was and was not verified.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9C%85%3C/text%3E%3C/svg%3E">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #eef1f4; --surface: #ffffff; --ink: #101a24; --muted: #4a5866; --line: #cbd3db;
+  --accent: #0b5fff; --accent-ink: #ffffff; --pass: #0e7a4b; --fail: #b3261e; --code-bg: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0d141b; --surface: #131d27; --ink: #e6edf3; --muted: #9aa8b5; --line: #263340;
+    --accent: #6ea8ff; --accent-ink: #0d141b; --pass: #4cc38a; --fail: #ff8a80; --code-bg: #0f1820;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d141b; --surface: #131d27; --ink: #e6edf3; --muted: #9aa8b5; --line: #263340;
+  --accent: #6ea8ff; --accent-ink: #0d141b; --pass: #4cc38a; --fail: #ff8a80; --code-bg: #0f1820;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  padding: env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0);
+}
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+a { color: var(--accent); }
+code, pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+h1, h2 { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-weight: 700; letter-spacing: -0.01em; line-height: 1.15; }
+
+header.top { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; gap: 16px; flex-wrap: wrap; }
+.brand { font-weight: 700; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+nav a { margin-left: 20px; text-decoration: none; color: var(--muted); font-size: 15px; }
+nav a:hover { color: var(--ink); }
+
+.hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 48px; align-items: center; padding: 56px 0 72px; }
+.hero h1 { font-size: clamp(34px, 5.2vw, 56px); margin: 0 0 20px; }
+.hero p.lead { font-size: 19px; color: var(--muted); margin: 0 0 28px; max-width: 34em; }
+.cta { display: flex; gap: 12px; flex-wrap: wrap; }
+.btn { display: inline-block; padding: 12px 20px; border-radius: 8px; font-weight: 600; text-decoration: none; border: 1px solid var(--line); color: var(--ink); background: var(--surface); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn:hover { filter: brightness(0.96); }
+
+.report { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.report .bar { padding: 10px 16px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; }
+.report pre { margin: 0; padding: 18px 16px; font-size: 13.5px; line-height: 1.7; overflow-x: auto; white-space: pre; }
+.pass { color: var(--pass); font-weight: 700; }
+.fail { color: var(--fail); font-weight: 700; }
+.dim { color: var(--muted); }
+
+section { padding: 56px 0; border-top: 1px solid var(--line); }
+section h2 { font-size: clamp(26px, 3.4vw, 36px); margin: 0 0 12px; }
+section p.sub { color: var(--muted); max-width: 40em; margin: 0 0 28px; }
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 15.5px; }
+th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font-weight: 600; color: var(--muted); font-size: 14px; }
+td:first-child { white-space: nowrap; }
+
+ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; display: grid; gap: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+ol.steps li { counter-increment: s; padding: 14px 18px 14px 56px; position: relative; border-bottom: 1px solid var(--line); }
+ol.steps li:last-child { border-bottom: 0; }
+ol.steps li::before { content: counter(s); position: absolute; left: 18px; top: 14px; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; font-size: 13px; color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; }
+ol.steps b { font-weight: 600; }
+
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 22px; }
+.card h3 { margin: 0 0 8px; font-size: 18px; }
+.card p { margin: 0 0 12px; color: var(--muted); font-size: 15.5px; }
+.cmd { position: relative; background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; margin: 10px 0 0; }
+.cmd pre { margin: 0; padding: 12px 70px 12px 14px; overflow-x: auto; font-size: 13.5px; line-height: 1.6; }
+.cmd button { position: absolute; top: 8px; right: 8px; font: inherit; font-size: 12.5px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+
+ul.plain { margin: 0; padding-left: 20px; }
+ul.plain li { margin: 6px 0; }
+.note { border-left: 3px solid var(--accent); padding: 4px 0 4px 16px; color: var(--muted); max-width: 44em; margin-top: 24px; }
+
+footer { border-top: 1px solid var(--line); padding: 32px 0 48px; color: var(--muted); font-size: 15px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+
+@media (max-width: 820px) {
+  .hero { grid-template-columns: 1fr; gap: 32px; padding: 32px 0 48px; }
+  .cols { grid-template-columns: 1fr; }
+  nav a { margin: 0 16px 0 0; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <a class="brand" href="#">verified-code-delivery <span>· a skill for Claude</span></a>
+  <nav>
+    <a href="#checks">What it checks</a>
+    <a href="#install">Install</a>
+    <a href="#safety">Safety</a>
+    <a href="https://github.com/gdigitalworld/Verified-code-delivery">GitHub</a>
+  </nav>
+</header>
+
+<main>
+<div class="hero">
+  <div>
+    <h1>Code that was run before it reached you.</h1>
+    <p class="lead">Generated code often arrives with a missing import, a type error, a crash on startup or a leaked key, and you find out when you run it. This skill makes Claude build, test and start the code in its sandbox first, fix what breaks, and tell you plainly what was and was not verified.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/gdigitalworld/Verified-code-delivery/releases/latest">Download the skill</a>
+      <a class="btn" href="https://github.com/gdigitalworld/Verified-code-delivery">View source</a>
+    </div>
+  </div>
+
+  <div class="report" aria-label="Example of the note Claude ends with">
+    <div class="bar"><span>.verify/VERIFICATION.md</span><span>example</span></div>
+<pre>
+<span class="pass">PASS</span>  install    npm install
+<span class="pass">PASS</span>  typecheck  tsc --noEmit
+<span class="pass">PASS</span>  build      next build
+<span class="pass">PASS</span>  test       12/12
+<span class="pass">PASS</span>  GET /api/health -&gt; 200
+
+<span class="pass">Verified:</span> npm install, tsc, next build,
+  tests, app boots and /api/health is 200.
+<span class="fail">Not verified:</span> Razorpay webhook
+  (needs live keys), Supabase RLS policy
+  (needs your DB).
+<span class="dim">ZIP: 5 changed files, 2 new.</span>
+</pre>
+  </div>
+</div>
+
+<section id="checks">
+  <h2>What it actually runs</h2>
+  <p class="sub">Every claim in Claude’s final note comes from the exit code and log of one of these scripts, not from Claude’s confidence. Python 3.11+ is the only requirement, and the scripts use the standard library only.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Script</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>verify.py</code></td><td>Detects Node, Python, Rust or Go (monorepos and workspaces too) and runs install, typecheck, lint, build and tests, recording exit codes and failure output.</td></tr>
+        <tr><td><code>check_imports.py</code></td><td>Finds imports that are missing from <code>package.json</code>, <code>requirements.txt</code> or <code>pyproject.toml</code>, the bug that only shows up on a clean install.</td></tr>
+        <tr><td><code>smoke_test.py</code></td><td>Starts the app for real and requests its routes on <code>127.0.0.1</code>, to catch crashes a build does not.</td></tr>
+        <tr><td><code>secret_scan.py</code></td><td>Looks for hardcoded API keys, tokens, private keys and committed <code>.env</code> files. Matches are masked in the output.</td></tr>
+        <tr><td><code>changed_files.py</code></td><td>Snapshots your original files, then lists exactly which ones are new, modified or deleted.</td></tr>
+        <tr><td><code>make_zip.py</code></td><td>Packs only the changed files with repo-relative paths, and refuses to create the ZIP if a secret is found.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="how">
+  <h2>How a task goes</h2>
+  <p class="sub">The effort scales with the task: a one-line regex is run once, a multi-file feature gets the full workflow.</p>
+  <ol class="steps">
+    <li><b>Mirror your repo and take a snapshot</b> before anything is edited.</li>
+    <li><b>Run the checks</b>, read the failures, fix the root cause and run again. It stops after about five rounds on the same error and tells you what is stuck.</li>
+    <li><b>Check imports</b> against the dependency manifest.</li>
+    <li><b>Smoke test</b> anything that serves requests.</li>
+    <li><b>Say what cannot be verified</b>: live payment or auth APIs, your database, real secrets, browser-only behaviour.</li>
+    <li><b>Deliver</b> the code in the reply, or a ZIP of only the changed files.</li>
+    <li><b>End with a short verification note</b> taken from the real script output.</li>
+  </ol>
+  <p class="note">It does not make a check pass by cheating: no <code>@ts-ignore</code>, deleted tests or loosened assertions unless you approve.</p>
+</section>
+
+<section id="install">
+  <h2>Install</h2>
+  <div class="cols">
+    <div class="card">
+      <h3>Claude (web, desktop, mobile)</h3>
+      <p>Download <code>verified-code-delivery.skill</code> from the latest release, then upload it in Claude’s Skills settings. Then just ask Claude to write, fix or refactor code.</p>
+      <p>Tip: say “verify it and give me a ZIP of the changed files” to get the full workflow.</p>
+    </div>
+    <div class="card">
+      <h3>Claude Code</h3>
+      <p>Copy the skill folder into your skills directory.</p>
+      <div class="cmd"><pre>git clone https://github.com/gdigitalworld/Verified-code-delivery
+cp -r Verified-code-delivery/skills/verified-code-delivery ~/.claude/skills/</pre><button type="button" data-copy>Copy</button></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:20px">
+    <h3>Or run the scripts by hand</h3>
+    <div class="cmd"><pre>python scripts/verify.py ./my-project
+python scripts/verify.py ./my-monorepo --project apps/web --env-file apps/web/.env.example
+python scripts/check_imports.py ./my-project
+python scripts/secret_scan.py ./my-project</pre><button type="button" data-copy>Copy</button></div>
+  </div>
+  <p class="note">Linux and macOS are the main targets. On Windows the test suite passes natively except the symlink tests, which need Developer Mode; WSL is the safest choice.</p>
+</section>
+
+<section id="safety">
+  <h2>Safety, stated plainly</h2>
+  <p class="sub">This tool runs your project’s own install, build and test commands, so treat it like running that code yourself.</p>
+  <div class="cols">
+    <div class="card">
+      <h3>Built in</h3>
+      <ul class="plain">
+        <li>Symlinks are never followed, and nothing outside the project folder is read or packed.</li>
+        <li>Only <code>127.0.0.1</code> is ever contacted.</li>
+        <li>A ZIP is blocked when a secret is found.</li>
+        <li>Variables like <code>PATH</code> and <code>NODE_OPTIONS</code> are refused from env files.</li>
+        <li>Zero runtime dependencies. Releases are built reproducibly with a signed provenance attestation.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Limits</h3>
+      <ul class="plain">
+        <li>Not a malware sandbox. Use <code>--ignore-scripts</code> and your own isolation for code you do not trust.</li>
+        <li>The secret scanner is pattern-based and will miss secrets with no recognisable shape.</li>
+        <li>Live APIs, databases and deployments cannot be verified from a sandbox. The note says so.</li>
+      </ul>
+      <p style="margin-top:12px">Read the <a href="https://github.com/gdigitalworld/Verified-code-delivery/blob/main/docs/THREAT_MODEL.md">threat model</a>. Report vulnerabilities privately, as described in <a href="https://github.com/gdigitalworld/Verified-code-delivery/blob/main/SECURITY.md">SECURITY.md</a>.</p>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <span>MIT licence · © 2026 Goswami Digital World</span>
+  <span><a href="https://github.com/gdigitalworld/Verified-code-delivery">github.com/gdigitalworld/Verified-code-delivery</a></span>
+</footer>
+
+</div>
+<script>
+document.querySelectorAll("[data-copy]").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    var text = btn.parentElement.querySelector("pre").innerText;
+    try {
+      navigator.clipboard.writeText(text).then(function () {
+        btn.textContent = "Copied";
+        setTimeout(function () { btn.textContent = "Copy"; }, 1500);
+      }, function () { btn.textContent = "Select and copy"; });
+    } catch (e) { btn.textContent = "Select and copy"; }
+  });
+});
+</script>
+</body>
+</html>
