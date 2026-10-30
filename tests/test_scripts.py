@@ -139,11 +139,12 @@ class CheckImportsTests(TmpDirCase):
         for ok in ("'requests'", "'yaml'", "'app'", "'os'"):
             self.assertNotIn(ok, res.stdout)
 
-    def test_python_without_manifest_only_notes(self):
+    def test_python_without_manifest_is_not_reported_as_pass(self):
         write(self.root, "main.py", "import numpy\n")
         res = run("check_imports.py", self.root)
-        self.assertEqual(res.returncode, 0)
+        self.assertEqual(res.returncode, 3)  # nothing was checked: never a pass
         self.assertIn("NOTE", res.stdout)
+        self.assertNotIn("PASS", res.stdout)
 
 
 # ------------------------------------------------------------ changed_files

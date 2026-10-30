@@ -44,11 +44,11 @@ Write each file with the file-creation tool, not shell heredocs or string templa
 python <skill-dir>/scripts/verify.py <project>
 ```
 
-Read the failure output (failing test assertions are shown first), fix the root cause, run again. If the failure comes from the project's own test or build script rather than the code (for example `node --test tests/` on Node 22), fix that script first, then the code. Repeat until clean, but stop after about five rounds on the same error and tell the user what is stuck and what you tried. Use `--only build,test` or `--skip lint` to re-run part of the pipeline while iterating. If install fails, nothing after it runs, so fix that first.
+Read the failure output (failing test assertions are shown first), fix the root cause, run again. If the failure comes from the project's own test or build script rather than the code (for example `node --test tests/` on Node 22), fix that script first, then the code. Repeat until clean, but stop after about five rounds on the same error and tell the user what is stuck and what you tried. Use `--only build,test` or `--skip lint` to re-run part of the pipeline while iterating. If install fails, nothing after it runs, so fix that first. A step marked MISSING TOOL (exit 127, for example `go: not found`) means the toolchain is not installed here, not that the code is wrong: install it if you can, otherwise list that step as not verified.
 
 `verify.py` runs the project's own install, build and test commands, so it executes whatever code the project contains. That is fine for code Claude just wrote. For a repo the user uploaded or dependencies you do not recognise, add `--ignore-scripts` so package install hooks do not run (some packages that need a postinstall step, such as `prisma generate`, will then need that step run by hand).
 
-**Monorepos:** the script finds every project up to three levels deep and runs each step in its own folder. A JS workspace installs once at the root and uses the workspace's package manager. Add `--project apps/web` to check only part of the repo; the workspace root install still runs.
+**Monorepos:** the script finds every project up to three levels deep and runs each step in its own folder. A JS workspace installs once at the root and uses the workspace's package manager. Add `--project apps/web` to check only part of the repo (it works for projects beyond the 25-project cap too); the workspace root install still runs.
 
 **Environment variables:** builds often need variables just to compile. Pass placeholders with `--env-file .env.example` or `--env KEY=VALUE`, never real secrets. Variables that change how code is loaded (`PATH`, `NODE_OPTIONS`, `LD_PRELOAD` and similar) are refused, and values are never printed.
 
@@ -62,7 +62,7 @@ Never make a check pass by cheating: no `@ts-ignore`, `any`, `eslint-disable`, d
 python <skill-dir>/scripts/check_imports.py <project>
 ```
 
-Run this even when `verify.py` is green: a package that happens to be installed in the sandbox makes build and tests pass while a clean install on the user's machine fails. Every import must be declared in the manifest. Fix by adding the dependency to `package.json` or `requirements.txt` (and remember that file now belongs in the ZIP). The script is conservative about stdlib, local modules and tsconfig path aliases, but still read each hit: an optional or dev-only import may be a deliberate exception.
+Run this even when `verify.py` is green: a package that happens to be installed in the sandbox makes build and tests pass while a clean install on the user's machine fails. Exit code 3 means no manifest was found and nothing was checked: that is not a pass, so say so in the note. Every import must be declared in the manifest. Fix by adding the dependency to `package.json` or `requirements.txt` (and remember that file now belongs in the ZIP). The script is conservative about stdlib, local modules and tsconfig path aliases, but still read each hit: an optional or dev-only import may be a deliberate exception.
 
 ### 4. Smoke test anything that serves requests
 For a web app, API or server, build passing is not enough. Start it and hit real routes:
