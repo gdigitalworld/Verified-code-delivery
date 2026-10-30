@@ -9,7 +9,8 @@ path alias) must appear in package.json dependencies/devDependencies/peer/option
 Python: every third-party import must appear in requirements*.txt or pyproject.toml.
 This is the most common bug in generated code: it imports a package it forgot
 to add, and everything works until the user runs a clean install.
-Exit code 1 if anything is missing.
+Exit code 1 if anything is missing, 3 if no manifest was found and nothing could be checked
+(never read that as a pass).
 """
 import ast
 import json
@@ -259,13 +260,23 @@ def main() -> None:
         sys.exit(f"Not a directory: {root}")
 
     problems: list[str] = []
-    notes: list[str] = []
-    if (root / "package.json").exists():
+    notes: list[str] = []   # things that were NOT checked
+    checked = False         # did at least one language actually get checked?
+
+    has_js = any(True for _ in walk(root, JS_EXT))
+    if package_jsons(root):
         problems += check_node(root)
+        checked = True
+    elif has_js:
+        notes.append("JS/TS files found but no package.json, so their imports were not checked.")
+
+    has_py = any(True for _ in walk(root, {".py"}))
     py_problems, py_note = check_python(root)
     problems += py_problems
     if py_note:
         notes.append(py_note)
+    elif has_py:
+        checked = True
 
     for n in notes:
         print(f"NOTE  {n}")
@@ -276,8 +287,14 @@ def main() -> None:
         for p in problems:
             print(f"  {p}")
         sys.exit(1)
+    if notes and not checked:
+        # Exit code 3 = nothing was checked. Never report this as a pass.
+        print("NOTE  no manifest found, nothing checked")
+        sys.exit(3)
+    if notes:
+        print("PASS  every import that could be checked is declared (see the NOTE lines for what was skipped)")
+        return
     print("PASS  every import is declared in the dependency manifest")
-
 
 if __name__ == "__main__":
     main()

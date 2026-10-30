@@ -32,6 +32,7 @@ import envutil  # noqa: E402
 from changed_files import diff as snapshot_diff, iter_files, take_snapshot  # noqa: E402
 
 TAIL_LINES = 40
+MISSING_TOOL_CODES = (127, 9009)
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 MAX_RESTORE_FILE = 512 * 1024
 MAX_RESTORE_TOTAL = 50 * 1024 * 1024
@@ -77,7 +78,9 @@ def run_step(step: dict, root: Path, timeout: int, extra_env: dict[str, str] | N
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, errors="replace", timeout=timeout,
         )
-        code, output, status = proc.returncode, proc.stdout, ("passed" if proc.returncode == 0 else "failed")
+        code, output = proc.returncode, proc.stdout
+        # 127 is "command not found" in a POSIX shell, 9009 in cmd.exe: the tool is not installed.
+        status = "passed" if code == 0 else ("missing" if code in MISSING_TOOL_CODES else "failed")
     except subprocess.TimeoutExpired as e:
         raw = e.stdout or ""
         output = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw
@@ -117,7 +120,8 @@ def write_reports(results: list[dict], root: Path, out: Path, side_effects: dict
     side_effects = side_effects or {}
     (out / "side_effects.json").write_text(json.dumps(side_effects, indent=2), encoding="utf-8")
 
-    icon = {"passed": "PASS", "failed": "FAIL", "timeout": "TIMEOUT", "skipped": "SKIPPED"}
+    icon = {"passed": "PASS", "failed": "FAIL", "timeout": "TIMEOUT", "skipped": "SKIPPED",
+            "missing": "MISSING TOOL"}
     lines = [
         "# Verification report",
         "",
@@ -128,6 +132,12 @@ def write_reports(results: list[dict], root: Path, out: Path, side_effects: dict
     ]
     for r in results:
         lines.append(f"| {r['kind']} | `{r.get('cwd', '.')}` | `{r['cmd']}` | {icon[r['status']]} | {r['seconds']}s |")
+    missing = [r for r in results if r["status"] == "missing"]
+    if missing:
+        lines += ["", "## Missing tools (not a code failure)", "",
+                  "A command was not found. Install that toolchain or dependency and run again."]
+        for r in missing:
+            lines.append(f"- {r['kind']}: `{label(r)}`")
     failures = [r for r in results if r["status"] in ("failed", "timeout")]
     if failures:
         lines += ["", "## Failure output (last lines)"]
@@ -171,7 +181,7 @@ def main() -> None:
     only = {k for k in args.only.split(",") if k}
     skip = {k for k in args.skip.split(",") if k}
 
-    if len(find_projects(root)) > MAX_PROJECTS:
+    if not args.subdirs and len(find_projects(root)) > MAX_PROJECTS:
         print(f"NOTE  more than {MAX_PROJECTS} projects found; only the first {MAX_PROJECTS} are checked. "
               f"Use --project <subdir> to choose.")
     steps = detect(root, args.subdirs)
@@ -227,12 +237,14 @@ def main() -> None:
             done = " (restored)" if rel in side_effects["restored"] else ""
             print(f"NOTE  checks changed files on their own: {text} {rel}{done}")
 
-    bad = [r for r in results if r["status"] in ("failed", "timeout", "skipped")]
+    bad = [r for r in results if r["status"] in ("failed", "timeout", "skipped", "missing")]
     ok = len(results) - len(bad)
     print(f"\n{ok}/{len(results)} steps passed. Report: {out / 'VERIFICATION.md'}")
     for r in bad:
         if r["status"] in ("failed", "timeout"):
             print(f"\n--- {r['kind']}: {label(r)} ({r['status']}) ---\n{r['tail']}")
+        elif r["status"] == "missing":
+            print(f"\n--- {r['kind']}: {label(r)} (tool not installed, not a code failure) ---\n{r['tail']}")
     sys.exit(1 if bad else 0)
 
 
