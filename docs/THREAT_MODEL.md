@@ -18,7 +18,7 @@ No script sends data to the network except through the project's package manager
 | Risk | Mitigation |
 |---|---|
 | Running untrusted project code | Unavoidable for build and test. Run in a sandbox or container. Use `verify.py --ignore-scripts` so dependency install hooks do not run. |
-| Command injection | Commands come from a fixed set built in `detect_checks.py`. File contents never become command text. `--cmd` for the smoke test is an explicit argument from the caller. |
+| Command injection | Commands come from a fixed set built in `detect_checks.py`. File contents never become command text. For folders without a project file, `detect_checks.py` puts file names into syntax-check commands, always shell-quoted with `shlex.quote` (covered by a test). `--cmd` for the smoke test is an explicit argument from the caller. |
 | Reading or packaging files outside the project (symlinks, `..`) | Symlinks are skipped by every scanner and refused by `make_zip.py`. Paths must resolve inside `--root`. Covered by tests. |
 | Leaking secrets in a delivered ZIP | `make_zip.py` scans every file it packs and refuses to create the archive on a match. Output masks the matched value. |
 | Fetching arbitrary URLs from a crafted `--path` | Paths must start with a single `/` and are always joined to `http://127.0.0.1:<port>`. |

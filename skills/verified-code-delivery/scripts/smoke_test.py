@@ -98,7 +98,7 @@ def main() -> None:
     env.update(extra_env)
     proc = subprocess.Popen(
         args.cmd, shell=True, cwd=args.cwd, env=env,
-        stdout=log, stderr=subprocess.STDOUT, **({} if os.name == "nt" else {"start_new_session": True}),
+        stdout=log, stderr=subprocess.STDOUT, start_new_session=(sys.platform != "win32"),
     )
 
     def tail() -> str:

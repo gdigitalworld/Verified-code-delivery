@@ -8,8 +8,9 @@ Steps come back in the order they should run:
 install -> typecheck -> lint -> build -> test.
 
 Monorepos are supported. Every directory (up to 3 levels deep) that holds a
-package.json, pyproject.toml, requirements.txt, setup.py, Cargo.toml or go.mod
-is treated as a project and its steps carry a "cwd" relative to the root.
+package.json, pyproject.toml, requirements.txt, setup.py, Cargo.toml, go.mod, pom.xml,\nbuild.gradle, *.csproj, composer.json, Gemfile, mix.exs, pubspec.yaml, Package.swift,\nCMakeLists.txt, Makefile or deno.json is treated as a project and its steps carry a "cwd" relative to the root.
+A folder with no project file at all falls back to one syntax check per source file
+(Python, JS, shell, PHP, Ruby, Perl, Go, C/C++, Java, Rust, Swift, JSON), kind "syntax".
 In a JS workspace root (package.json "workspaces" or pnpm-workspace.yaml) the
 install runs once at the root, and a kind the root already provides (for
 example a turbo "build") is not repeated inside each package.
@@ -18,18 +19,50 @@ Other scripts (verify.py) import detect() from here.
 import argparse
 import json
 import os
+import re
+import shlex
+import shutil
 import sys
 from pathlib import Path
+
+# Many systems (macOS, minimal Ubuntu) only have python3, so use whichever exists.
+PY = "python" if shutil.which("python") else ("python3" if shutil.which("python3") else "python")
 
 IGNORE_DIRS = {
     ".git", "node_modules", ".next", ".nuxt", ".turbo", ".cache", "dist", "build",
     "out", "coverage", "__pycache__", ".venv", "venv", "env", ".pytest_cache",
     ".mypy_cache", ".verify", ".svelte-kit", ".vercel", "target",
 }
-MARKERS = ("package.json", "pyproject.toml", "requirements.txt", "setup.py", "Cargo.toml", "go.mod")
+MARKERS = (
+    "package.json", "pyproject.toml", "requirements.txt", "setup.py", "Cargo.toml", "go.mod",
+    "pom.xml", "build.gradle", "build.gradle.kts", "composer.json", "Gemfile", "mix.exs",
+    "pubspec.yaml", "Package.swift", "CMakeLists.txt", "Makefile", "deno.json", "deno.jsonc",
+)
+MARKER_SUFFIXES = (".csproj", ".fsproj", ".sln")
+MAX_LOOSE_FILES = 40
+# Single files with no project file: a syntax check per language. {f} is shell-quoted.
+LOOSE_SYNTAX = {
+    ".py": PY + " -m py_compile {f}",
+    ".js": "node --check {f}", ".mjs": "node --check {f}", ".cjs": "node --check {f}",
+    ".sh": "bash -n {f}", ".bash": "bash -n {f}",
+    ".php": "php -l {f}",
+    ".rb": "ruby -c {f}",
+    ".pl": "perl -c {f}",
+    ".go": "gofmt -e -l {f}",
+    ".c": "gcc -fsyntax-only {f}",
+    ".cpp": "g++ -fsyntax-only {f}", ".cc": "g++ -fsyntax-only {f}",
+    ".java": 'javac -proc:none -d "$(mktemp -d)" {f}',
+    ".rs": 'rustc --crate-type lib --emit=metadata --out-dir "$(mktemp -d)" {f}',
+    ".swift": "swiftc -parse {f}",
+    ".json": PY + " -m json.tool {f} > /dev/null",
+}
 MAX_DEPTH = 3
 MAX_PROJECTS = 25
 KIND_ORDER = ["install", "typecheck", "lint", "build", "test"]
+COMPILEALL_CMD = (
+    PY + r' -m compileall -q -x "(^|[/\\\\])(node_modules|[.]venv|venv|env|[.]git|dist|build|[.]next|'
+    r'[.]nuxt|[.]turbo|[.]cache|target|[.]verify|[.]svelte-kit|[.]vercel|[.]tox|site-packages)([/\\\\]|$)" .'
+)
 
 
 def find_projects(root: Path, max_depth: int = MAX_DEPTH) -> list[Path]:
@@ -42,7 +75,7 @@ def find_projects(root: Path, max_depth: int = MAX_DEPTH) -> list[Path]:
             dirnames[:] = sorted(n for n in dirnames if n not in IGNORE_DIRS and not (d / n).is_symlink())
         else:
             dirnames[:] = []
-        if any(m in filenames for m in MARKERS):
+        if any(m in filenames for m in MARKERS) or any(f.endswith(MARKER_SUFFIXES) for f in filenames):
             found.append(d)
     return sorted(found, key=lambda p: (len(p.relative_to(root).parts), str(p)))
 
@@ -115,11 +148,13 @@ def _python_steps(d: Path) -> list[dict]:
     steps = []
     if (d / "requirements.txt").exists():
         steps.append({"stack": stack, "kind": "install",
-                      "cmd": "pip install -r requirements.txt --break-system-packages"})
+                      "cmd": f"{PY} -m pip install -r requirements.txt --break-system-packages"})
     elif (d / "pyproject.toml").exists():
         steps.append({"stack": stack, "kind": "install",
-                      "cmd": "pip install -e . --break-system-packages"})
-    steps.append({"stack": stack, "kind": "typecheck", "cmd": "python -m compileall -q ."})
+                      "cmd": f"{PY} -m pip install -e . --break-system-packages"})
+    # Skip dependency and build folders: node_modules and .venv hold other people's .py files
+    # (some with Python 2 syntax) that would fail the check for code that is fine.
+    steps.append({"stack": stack, "kind": "typecheck", "cmd": COMPILEALL_CMD})
 
     text = ""
     for name in ("pyproject.toml", "setup.cfg", "tox.ini", "requirements.txt"):
@@ -131,7 +166,101 @@ def _python_steps(d: Path) -> list[dict]:
     if "mypy" in text:
         steps.append({"stack": stack, "kind": "typecheck", "cmd": "mypy ."})
     if (d / "tests").exists() or (d / "test").exists() or "pytest" in text:
-        steps.append({"stack": stack, "kind": "test", "cmd": "python -m pytest -q"})
+        steps.append({"stack": stack, "kind": "test", "cmd": f"{PY} -m pytest -q"})
+    return steps
+
+
+def _read(d: Path, name: str) -> str:
+    try:
+        return (d / name).read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return ""
+
+
+def _other_stack_steps(d: Path) -> list[dict]:
+    """Java, .NET, PHP, Ruby, Elixir, Dart/Flutter, Swift, C/C++, Deno."""
+    steps: list[dict] = []
+
+    def add(stack: str, kind: str, cmd: str) -> None:
+        steps.append({"stack": stack, "kind": kind, "cmd": cmd})
+
+    if (d / "pom.xml").exists():
+        mvn = "./mvnw" if (d / "mvnw").exists() else "mvn"
+        add("java/maven", "build", f"{mvn} -B -q -DskipTests package")
+        add("java/maven", "test", f"{mvn} -B -q test")
+    if (d / "build.gradle").exists() or (d / "build.gradle.kts").exists():
+        gr = "./gradlew" if (d / "gradlew").exists() else "gradle"
+        add("java/gradle", "build", f"{gr} --console=plain -q build -x test")
+        add("java/gradle", "test", f"{gr} --console=plain -q test")
+    if any(d.glob("*.csproj")) or any(d.glob("*.fsproj")) or any(d.glob("*.sln")):
+        add("dotnet", "build", "dotnet build --nologo -v q")
+        add("dotnet", "test", "dotnet test --nologo -v q")
+    if (d / "composer.json").exists():
+        add("php", "install", "composer install --no-interaction")
+        try:
+            scripts = json.loads(_read(d, "composer.json") or "{}").get("scripts", {})
+        except json.JSONDecodeError:
+            scripts = {}
+        if "test" in scripts:
+            add("php", "test", "composer test")
+        elif (d / "phpunit.xml").exists() or (d / "phpunit.xml.dist").exists():
+            add("php", "test", "vendor/bin/phpunit")
+    if (d / "Gemfile").exists():
+        add("ruby", "install", "bundle install")
+        if (d / "spec").is_dir():
+            add("ruby", "test", "bundle exec rspec")
+        elif (d / "test").is_dir() or (d / "Rakefile").exists():
+            add("ruby", "test", "bundle exec rake test")
+    if (d / "mix.exs").exists():
+        add("elixir", "install", "mix deps.get")
+        add("elixir", "build", "mix compile")
+        add("elixir", "test", "mix test")
+    if (d / "pubspec.yaml").exists():
+        tool = "flutter" if re.search(r"^\s*flutter\s*:", _read(d, "pubspec.yaml"), re.MULTILINE) else "dart"
+        add(tool, "install", f"{tool} pub get")
+        add(tool, "lint", f"{tool} analyze")
+        if (d / "test").is_dir():
+            add(tool, "test", f"{tool} test")
+    if (d / "Package.swift").exists():
+        add("swift", "build", "swift build")
+        add("swift", "test", "swift test")
+    if (d / "CMakeLists.txt").exists():
+        add("cmake", "build", "cmake -S . -B build && cmake --build build")
+        if re.search(r"enable_testing|add_test", _read(d, "CMakeLists.txt"), re.IGNORECASE):
+            add("cmake", "test", "ctest --test-dir build --output-on-failure")
+    if (d / "deno.json").exists() or (d / "deno.jsonc").exists():
+        add("deno", "lint", "deno lint")
+        add("deno", "test", "deno test")
+    return steps
+
+
+def _make_steps(d: Path) -> list[dict]:
+    """A Makefile is used only when it defines the target and nothing else covers the folder."""
+    text = _read(d, "Makefile")
+    steps = []
+    for kind, target in (("build", "build"), ("lint", "lint"), ("test", "test"), ("test", "check")):
+        if re.search(rf"^{target}\s*:", text, re.MULTILINE) and not (kind == "test" and steps and steps[-1]["kind"] == "test"):
+            steps.append({"stack": "make", "kind": kind, "cmd": f"make {target}"})
+    return steps
+
+
+def loose_file_steps(root: Path) -> list[dict]:
+    """Syntax checks for source files when the folder has no project file at all."""
+    root = Path(root).resolve()
+    steps: list[dict] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        d = Path(dirpath)
+        depth = len(d.relative_to(root).parts)
+        dirnames[:] = sorted(n for n in dirnames if n not in IGNORE_DIRS and not (d / n).is_symlink()) if depth < MAX_DEPTH else []
+        for name in sorted(filenames):
+            f = d / name
+            tpl = LOOSE_SYNTAX.get(f.suffix.lower())
+            if not tpl or f.is_symlink() or not f.is_file():
+                continue
+            rel = f.relative_to(root).as_posix()
+            steps.append({"stack": "files", "kind": "syntax", "cwd": ".", "cmd": tpl.format(f=shlex.quote(rel))})
+            if len(steps) >= MAX_LOOSE_FILES:
+                return steps
     return steps
 
 
@@ -152,6 +281,9 @@ def _steps_for_dir(d: Path, pm: str | None = None) -> list[dict]:
             {"stack": "go", "kind": "lint", "cmd": "go vet ./..."},
             {"stack": "go", "kind": "test", "cmd": "go test ./..."},
         ]
+    steps += _other_stack_steps(d)
+    if not steps:
+        steps += _make_steps(d)
     return steps
 
 
@@ -181,6 +313,9 @@ def detect(root: Path, only: list[str] | None = None) -> list[dict]:
                     continue  # installed once at the workspace root / root already runs this kind
             steps.append({**s, "cwd": rel})
 
+    if not steps and not wanted:
+        steps = loose_file_steps(root)  # no project file anywhere: at least syntax-check each file
+
     if only:
         keep_root_install = ws_root is not None and "." not in wanted
         steps = [s for s in steps
@@ -205,7 +340,7 @@ def main() -> None:
     if args.json:
         print(json.dumps(steps, indent=2))
     elif not steps:
-        print("No known project files found. Run the code directly with a realistic input.")
+        print("No project files or known source files found. Run the code directly with a realistic input.")
     else:
         for s in steps:
             where = "" if s["cwd"] == "." else f"  (in {s['cwd']})"

@@ -21,6 +21,7 @@ import argparse
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -66,6 +67,28 @@ def failure_excerpt(output: str, limit: int = TAIL_LINES) -> str:
     return f"[failing tests]\n{head}\n\n[end of output]\n{tail}"
 
 
+PY_MODULE_RE = re.compile(r'^"?[^\s"]*python[\d.]*(?:\.exe)?"?\s+-m\s+([\w.]+)', re.IGNORECASE)
+
+
+def module_missing(cmd: str, output: str) -> bool:
+    """True for `python -m tool` when the tool itself is not installed (for example pytest).
+
+    That is the Python equivalent of exit code 127: the toolchain is absent, the code is not wrong.
+    """
+    m = PY_MODULE_RE.match(cmd.strip())
+    return bool(m and re.search(rf"No module named '?{re.escape(m.group(1))}\b", output))
+
+
+def _kill_group(proc: subprocess.Popen) -> None:
+    try:
+        if sys.platform == "win32":
+            proc.kill()
+        else:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        pass
+
+
 def run_step(step: dict, root: Path, timeout: int, extra_env: dict[str, str] | None = None) -> dict:
     env = dict(os.environ)
     env.update({"CI": "1", "NEXT_TELEMETRY_DISABLED": "1", "FORCE_COLOR": "0"})
@@ -73,16 +96,29 @@ def run_step(step: dict, root: Path, timeout: int, extra_env: dict[str, str] | N
     cwd = root / step.get("cwd", ".")
     start = time.time()
     try:
-        proc = subprocess.run(
+        # Own process group, so a timeout can stop the shell AND everything it started
+        # (npm -> node -> dev server). Killing only the shell leaves children that keep the pipe open.
+        proc = subprocess.Popen(
             step["cmd"], shell=True, cwd=cwd, env=env,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, errors="replace", timeout=timeout,
+            text=True, errors="replace", start_new_session=True,
         )
-        code, output = proc.returncode, proc.stdout
+        try:
+            output, _ = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired as e:
+            partial = e.stdout or ""
+            _kill_group(proc)
+            try:
+                rest, _ = proc.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                rest = ""
+            partial = partial.decode("utf-8", "replace") if isinstance(partial, bytes) else partial
+            raise subprocess.TimeoutExpired(step["cmd"], timeout, output=partial + (rest or "")) from None
+        code = proc.returncode
         # 127 is "command not found" in a POSIX shell, 9009 in cmd.exe: the tool is not installed.
-        status = "passed" if code == 0 else ("missing" if code in MISSING_TOOL_CODES else "failed")
+        status = "passed" if code == 0 else ("missing" if code in MISSING_TOOL_CODES or module_missing(step["cmd"], output) else "failed")
     except subprocess.TimeoutExpired as e:
-        raw = e.stdout or ""
+        raw = e.output or e.stdout or ""
         output = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw
         code, status = None, "timeout"
     return {

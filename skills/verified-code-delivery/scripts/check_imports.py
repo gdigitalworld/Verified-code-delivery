@@ -226,7 +226,7 @@ def check_python(root: Path) -> tuple[list[str], str | None]:
             tree, names_by_node = None, regex_imports(text)  # still check this file's imports
         for node in (ast.walk(tree) if tree else [None]):
             if tree is None:
-                names = names_by_node
+                names = names_by_node or []
             elif isinstance(node, ast.Import):
                 names = [(a.name.split(".")[0], node.lineno) for a in node.names]
             elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
