@@ -1,6 +1,8 @@
 """Tests for: --project beyond the project cap, check_imports never reporting a false PASS
 when it found no manifest, a missing toolchain reported as such, and eslint detection."""
 import json
+import os
+import subprocess
 import sys
 import unittest
 
@@ -84,10 +86,17 @@ class MissingToolchainTests(TmpDirCase):
 
     @unittest.skipIf(sys.platform == "win32", "exit code 127 is a POSIX shell convention")
     def test_report_explains_it_is_not_a_code_failure(self):
+        # CI runners ship Go, Rust and Node, so the test must not rely on a tool being absent:
+        # run with an empty PATH, where every tool is guaranteed to be missing.
         write(self.root, "go.mod", "module x\n")
-        res = run("verify.py", self.root, "--timeout", "30", "--only", "build",
-                  "--out", self.root / "out")
-        self.assertEqual(res.returncode, 1)
+        empty = self.root / "empty-bin"
+        empty.mkdir()
+        env = {**os.environ, "PATH": str(empty)}
+        res = subprocess.run(
+            [sys.executable, str(SCRIPTS / "verify.py"), str(self.root), "--timeout", "30",
+             "--only", "build", "--out", str(self.root / "out")],
+            env=env, capture_output=True, text=True, timeout=120)
+        self.assertEqual(res.returncode, 1, res.stdout + res.stderr)
         report = (self.root / "out" / "VERIFICATION.md").read_text()
         self.assertIn("MISSING", report)
         self.assertIn("not a code failure", report)
