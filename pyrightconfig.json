@@ -1,0 +1,5 @@
+{
+  "include": ["skills", "tests", "tools"],
+  "extraPaths": ["skills/verified-code-delivery/scripts", "tests", "tools"],
+  "pythonVersion": "3.11"
+}

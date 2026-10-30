@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 from test_scripts import make_symlink  # noqa: E402
 
-import build_skill  # noqa: E402
+import build_skill  # noqa: E402  # type: ignore[reportMissingImports]
 
 
 class BuildSkillTests(unittest.TestCase):

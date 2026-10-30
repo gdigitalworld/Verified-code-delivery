@@ -1,6 +1,6 @@
 ---
 name: verified-code-delivery
-description: Run, build, and test code in the sandbox BEFORE handing it to the user, fix any errors found, and deliver only code that actually works, with a short honest note on what was and wasn't verified. Use this skill whenever the user asks Claude to write, fix, refactor, migrate, or add a feature to code, especially multi-file changes, web apps (Next.js, React, Node), Python scripts or APIs, or anything with a build step, even if they never say "test it" or "make sure it works". Also use it when the user wants changed files delivered as a ZIP with correct folder paths.
+description: Run, build, and test code in the sandbox BEFORE handing it to the user, fix any errors found, and deliver only code that actually works, with a short honest note on what was and wasn't verified. Use this skill whenever the user asks Claude to write, fix, refactor, migrate, or add a feature to code in any language or framework (JavaScript, TypeScript, Python, Java, C#, Go, Rust, PHP, Ruby, C/C++, shell, Flutter and more), from a one-file script to a multi-file web app or API, even if they never say "test it" or "make sure it works". Also use it when the user wants changed files delivered as a ZIP with correct folder paths.
 ---
 
 # Verified Code Delivery
@@ -15,11 +15,20 @@ Code that looks right but was never run often fails on the user's machine: a mis
 - **Single file or small fix:** verify it, then give the code directly in the reply. No ZIP.
 - **Multi-file change or whole feature:** run the full workflow and deliver a ZIP.
 
+## Verify the task itself, in any language
+
+Whatever the user asks for, the code is only done when the **specific thing they asked for** has been shown to work. A green build alone is not that. For every request:
+
+1. State in one line what must be true when the code is correct (the acceptance check), for example "login with a wrong password returns 401" or "the script outputs 3 rows for this CSV".
+2. Prove it by running something real: the project's own tests if they cover it, otherwise a small test or script you write that exercises the requested behaviour with realistic input, including one edge case or failure case. Keep that test in the delivery if it is useful.
+3. If the stack is unusual, there is no project file, or the scripts do not know it, run the language's own tools by hand: compile or syntax check, then run the code with a sample input and compare the output. Install the toolchain if you can (apt, pip, npm).
+4. Deliver only after the check passes. If it cannot run here, say exactly which part is unverified (step 5 and 7).
+
 ## The scripts
 
 | Script | What it does |
 |---|---|
-| `scripts/verify.py` | Detects the stack, runs install → typecheck → lint → build → test, records exit codes and failure output in `.verify/VERIFICATION.md` |
+| `scripts/verify.py` | Detects the stack (Node, Python, Go, Rust, Java, .NET, PHP, Ruby, Elixir, Dart/Flutter, Swift, C/C++, Deno, Makefile; plain files get a syntax check), runs install → typecheck → lint → build → test, records exit codes and failure output in `.verify/VERIFICATION.md` |
 | `scripts/check_imports.py` | Finds imports missing from `package.json` / `requirements.txt` / `pyproject.toml` |
 | `scripts/smoke_test.py` | Starts the app for real and hits endpoints, to catch crashes that builds miss |
 | `scripts/secret_scan.py` | Finds hardcoded API keys, tokens, private keys, `.env` files |
@@ -44,7 +53,7 @@ Write each file with the file-creation tool, not shell heredocs or string templa
 python <skill-dir>/scripts/verify.py <project>
 ```
 
-Read the failure output (failing test assertions are shown first), fix the root cause, run again. If the failure comes from the project's own test or build script rather than the code (for example `node --test tests/` on Node 22), fix that script first, then the code. Repeat until clean, but stop after about five rounds on the same error and tell the user what is stuck and what you tried. Use `--only build,test` or `--skip lint` to re-run part of the pipeline while iterating. If install fails, nothing after it runs, so fix that first. A step marked MISSING TOOL (exit 127, for example `go: not found`) means the toolchain is not installed here, not that the code is wrong: install it if you can, otherwise list that step as not verified.
+Read the failure output (failing test assertions are shown first), fix the root cause, run again. If the failure comes from the project's own test or build script rather than the code (for example `node --test tests/` on Node 22), fix that script first, then the code. Repeat until clean, but stop after about five rounds on the same error and tell the user what is stuck and what you tried. Use `--only build,test` or `--skip lint` to re-run part of the pipeline while iterating. If install fails, nothing after it runs, so fix that first. A step marked MISSING TOOL (exit 127, for example `go: not found`, or `No module named pytest` for a `python -m` tool) means the toolchain is not installed here, not that the code is wrong: install it if you can, otherwise list that step as not verified.
 
 `verify.py` runs the project's own install, build and test commands, so it executes whatever code the project contains. That is fine for code Claude just wrote. For a repo the user uploaded or dependencies you do not recognise, add `--ignore-scripts` so package install hooks do not run (some packages that need a postinstall step, such as `prisma generate`, will then need that step run by hand).
 
@@ -56,13 +65,15 @@ Read the failure output (failing test assertions are shown first), fix the root 
 
 Never make a check pass by cheating: no `@ts-ignore`, `any`, `eslint-disable`, deleted tests or loosened assertions unless the user approves. A green check obtained that way hides the problem.
 
+Green checks only prove the project builds. Then run your task-specific check from "Verify the task itself" above and fix until it passes too. If the project has no tests, write one for the new behaviour; never claim a feature works because it compiles.
+
 ### 3. Check imports
 
 ```
 python <skill-dir>/scripts/check_imports.py <project>
 ```
 
-Run this even when `verify.py` is green: a package that happens to be installed in the sandbox makes build and tests pass while a clean install on the user's machine fails. Exit code 3 means no manifest was found and nothing was checked: that is not a pass, so say so in the note. Every import must be declared in the manifest. Fix by adding the dependency to `package.json` or `requirements.txt` (and remember that file now belongs in the ZIP). The script is conservative about stdlib, local modules and tsconfig path aliases, but still read each hit: an optional or dev-only import may be a deliberate exception.
+Run this even when `verify.py` is green: a package that happens to be installed in the sandbox makes build and tests pass while a clean install on the user's machine fails. Exit code 3 means no manifest was found and nothing was checked: that is not a pass, so say so in the note. This script covers JavaScript, TypeScript and Python only; for other languages the compiler or package manager in step 2 reports missing dependencies. Every import must be declared in the manifest. Fix by adding the dependency to `package.json` or `requirements.txt` (and remember that file now belongs in the ZIP). The script is conservative about stdlib, local modules and tsconfig path aliases, but still read each hit: an optional or dev-only import may be a deliberate exception.
 
 ### 4. Smoke test anything that serves requests
 For a web app, API or server, build passing is not enough. Start it and hit real routes:
