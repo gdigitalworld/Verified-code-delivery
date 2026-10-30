@@ -67,6 +67,11 @@ def package_manager(d: Path) -> str:
     return "npm"
 
 
+def _has_eslint_config(d: Path) -> bool:
+    legacy = (".eslintrc", ".eslintrc.json", ".eslintrc.js", ".eslintrc.cjs", ".eslintrc.yml", ".eslintrc.yaml")
+    return any(d.glob("eslint.config.*")) or any((d / n).exists() for n in legacy)
+
+
 def _node_steps(d: Path, pm: str | None = None) -> list[dict]:
     try:
         pkg = json.loads((d / "package.json").read_text(encoding="utf-8"))
@@ -90,6 +95,8 @@ def _node_steps(d: Path, pm: str | None = None) -> list[dict]:
 
     if "lint" in scripts:
         steps.append({"stack": stack, "kind": "lint", "cmd": f"{run} lint"})
+    elif "eslint" in deps and _has_eslint_config(d):
+        steps.append({"stack": stack, "kind": "lint", "cmd": "npx --no-install eslint ."})
     if "build" in scripts:
         steps.append({"stack": stack, "kind": "build", "cmd": f"{run} build"})
 
@@ -151,7 +158,15 @@ def _steps_for_dir(d: Path, pm: str | None = None) -> list[dict]:
 def detect(root: Path, only: list[str] | None = None) -> list[dict]:
     """Steps for the whole tree, each with a 'cwd' relative to root ('.' for the root)."""
     root = Path(root).resolve()
-    projects = find_projects(root)[:MAX_PROJECTS]
+    wanted = [w.strip("/").removeprefix("./") or "." for w in only or []]
+
+    def chosen(p: Path) -> bool:
+        rel = p.relative_to(root).as_posix() or "."
+        # the root stays in so a workspace can still run its single install
+        return not wanted or p == root or any(rel == w or rel.startswith(w + "/") for w in wanted)
+
+    # Filter first, then cap: --project must be able to reach a project beyond the cap.
+    projects = [p for p in find_projects(root) if chosen(p)][:MAX_PROJECTS]
     ws_root = root if is_workspace_root(root) else None
 
     root_kinds = {s["kind"] for s in _steps_for_dir(root)} if ws_root else set()
@@ -167,7 +182,6 @@ def detect(root: Path, only: list[str] | None = None) -> list[dict]:
             steps.append({**s, "cwd": rel})
 
     if only:
-        wanted = [w.strip("/").removeprefix("./") or "." for w in only]
         keep_root_install = ws_root is not None and "." not in wanted
         steps = [s for s in steps
                  if any(s["cwd"] == w or s["cwd"].startswith(w + "/") for w in wanted)
