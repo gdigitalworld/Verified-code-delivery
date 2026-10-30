@@ -6,12 +6,13 @@ Without it, generated code often arrives with a missing import, a type error, a 
 
 ## What it does
 
-1. Detects the stack (Node, Python, Rust, Go), including monorepos and workspaces, and runs install, typecheck, lint, build and tests in each project (`verify.py`). Placeholder env vars can be passed with `--env-file .env.example`, and edits that tools make to your files on their own (like `next build` rewriting `tsconfig.json`) are reported and can be undone.
+1. Detects the stack (Node, Python, Go, Rust, Java, .NET, PHP, Ruby, Elixir, Dart/Flutter, Swift, C/C++, Deno; plain files get a syntax check), including monorepos and workspaces, and runs install, typecheck, lint, build and tests in each project (`verify.py`). Placeholder env vars can be passed with `--env-file .env.example`, and edits that tools make to your files on their own (like `next build` rewriting `tsconfig.json`) are reported and can be undone.
 2. Checks that every import is declared in `package.json` / `requirements.txt` / `pyproject.toml` (`check_imports.py`)
 3. Starts the app for real and hits its endpoints (`smoke_test.py`)
 4. Scans for hardcoded keys, tokens and `.env` files (`secret_scan.py`)
 5. Works out exactly which files changed (`changed_files.py`) and ZIPs only those, with correct repo-relative paths (`make_zip.py`). The ZIP is refused if a secret is found.
-6. Ends with a short note: what ran, what passed, what could not be verified (live APIs, databases, secrets)
+6. Proves the specific task that was asked for (a runnable acceptance check, not just a green build), in any language
+7. Ends with a short note: what ran, what passed, what could not be verified (live APIs, databases, secrets)
 
 Website: https://gdigitalworld.github.io/Verified-code-delivery/ (source: `docs/index.html`)
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.0 (2026-10-30)
+
+The skill now covers any language and any kind of coding task, and always verifies the specific thing that was asked for.
+
+- `SKILL.md`: new section "Verify the task itself, in any language". Every request needs a stated acceptance check that is run for real (project tests, or a small test or script with realistic input including an edge case). A green build alone no longer counts as verified.
+- `detect_checks.py` / `verify.py` now detect Java (Maven, Gradle, wrappers), .NET, PHP (Composer), Ruby (Bundler), Elixir, Dart and Flutter, Swift, C/C++ (CMake), Deno and Makefile targets, besides Node, Python, Go and Rust.
+- A folder with no project file gets one syntax check per source file (Python, JS, shell, PHP, Ruby, Perl, Go, C/C++, Java, Rust, Swift, JSON) instead of "no steps". File names are shell-quoted, so an odd name cannot inject a command.
+- Editor warnings cleaned up: `pyrightconfig.json` makes VS Code (Pylance) resolve the script imports in `tests/`, process-group calls are guarded with `sys.platform` so Windows type checking is clean, and a few loose type hints were fixed. Pyright reports 0 errors on Windows, Linux and macOS settings.
+- The description of the skill names the languages it covers; trigger queries for Java, Go, PHP and shell were added.
+- Landing page (`docs/index.html`): header is now sticky with a solid background, respects phone safe areas, anchor links no longer hide under it, and the menu scrolls instead of wrapping badly on small screens. The page lists the new languages.
+- The Python syntax check (`compileall`) no longer walks `node_modules`, `.venv`, `site-packages`, build output and caches, so a foreign Python 2 file inside `node_modules` cannot fail good code.
+- `python -m <tool>` with the tool not installed (for example `No module named pytest`) is reported as MISSING TOOL, not as a code failure.
+- Python commands use `python3` when the machine has no `python` (macOS, minimal Ubuntu), and `pip` runs as `<python> -m pip`.
+- A step that times out now stops the whole process tree. Before, a child such as a dev server could keep the output open and make `verify.py` wait long after the timeout.
+
 ## 1.1.0 (2026-10-30)
 
 Fixes for false greens and a few gaps found while testing the skill on real projects.

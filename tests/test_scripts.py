@@ -27,7 +27,7 @@ import secret_scan  # noqa: E402
 import verify  # noqa: E402
 
 
-def run(script: str, *args: str, cwd: Path | None = None, timeout: int = 120):
+def run(script: str, *args: object, cwd: Path | None = None, timeout: int = 120):
     return subprocess.run(
         [sys.executable, str(SCRIPTS / script), *map(str, args)],
         cwd=cwd, capture_output=True, text=True, timeout=timeout,
